@@ -1,0 +1,41 @@
+import _proxyLib "git.redmadrobot.com/backend-go/rmr-pkg/proxy"
+
+{{ $decorator := (or .Vars.DecoratorName (printf "%sProxy" .Interface.Name)) }}
+
+var _ {{.Interface.Type}} = (*{{$decorator}})(nil)
+
+// {{$decorator}} implements {{.Interface.Type}} interface proxy
+type {{$decorator}} struct {
+  _object {{.Interface.Type}}
+  _methodInvocationInterceptor _proxyLib.MethodInvocationInterceptor
+  _panicInterceptor _proxyLib.PanicInterceptor
+}
+
+{{range $method := .Interface.Methods}}
+  // {{$method.Name}} implements {{$.Interface.Type}}
+  func (_p *{{$decorator}}) {{$method.Declaration}} {
+	defer _proxyLib.PanicInterception(_p._panicInterceptor)
+
+	_genericFunc := _p._methodInvocationInterceptor.GenericFunction(_p._object, "{{$method.Name}}")
+	_proxy{{$method.Name}} := _proxyLib.MakeFunc[func{{$method.Signature}}](_genericFunc)
+    {{$method.Pass "_proxy" }}
+  }
+{{end}}
+
+// New{{$decorator}} returns {{$decorator}}
+func New{{$decorator}} (object {{.Interface.Type}}, middlewares ..._proxyLib.MethodInvocationMiddleware) *{{$decorator}} {
+  return &{{$decorator}} {
+    _object: object,
+    _methodInvocationInterceptor: _proxyLib.MakeMethodInvocationInterceptor(middlewares...),
+    _panicInterceptor: _proxyLib.DefaultPanicInterceptor,
+  }
+}
+
+// New{{$decorator}}WithPanicHook returns {{$decorator}}
+func New{{$decorator}}WithPanicHook(object {{.Interface.Type}}, onPanic _proxyLib.PanicInterceptor, middlewares ..._proxyLib.MethodInvocationMiddleware) *{{$decorator}} {
+	return &{{$decorator}} {
+		_object:                      object,
+		_methodInvocationInterceptor: _proxyLib.MakeMethodInvocationInterceptor(middlewares...),
+		_panicInterceptor:            onPanic,
+	}
+}

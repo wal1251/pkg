@@ -1,0 +1,17 @@
+version: '3.8'
+
+x-defaults: &defaults
+  env_file:
+    - .env
+  restart: unless-stopped
+
+
+
+services:
+  rmr-pkg-godoc-server:
+    <<: *defaults
+    container_name: godoc-server
+    image: registry.redmadrobot.com:5005/backend-go/rmr-pkg/godoc-server:latest
+    ports:
+      - published: ${GODOC_SERVER_PORT:-6060}
+        target: 6060

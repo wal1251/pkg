@@ -1,0 +1,58 @@
+import _proxyLib "github.com/wal1251/pkg/proxy"
+
+{{ $decorator := (or .Vars.DecoratorName (printf "%sHook" .Interface.Name)) }}
+
+var _ {{.Interface.Type}} = (*{{$decorator}})(nil)
+
+// {{$decorator}} implements {{.Interface.Type}} interface wrapper
+type {{$decorator}} struct {
+  {{.Interface.Type}}
+  _beforeCall _proxyLib.Hook
+  _postCall _proxyLib.Hook
+  _onPanic _proxyLib.PanicHook
+}
+
+{{range $method := .Interface.Methods}}
+  // {{$method.Name}} implements {{$.Interface.Type}}
+  func (_w *{{$decorator}}) {{$method.Declaration}} {
+    _params := []any{ {{$method.ParamsNames}} }
+
+	_ctx := _proxyLib.ExtractContext(_params)
+    _ctx = _w._beforeCall.Hook(_ctx, _w.{{$.Interface.Name}}, "{{$method.Name}}", _params)
+
+   {{if $method.Params}}
+       {{if eq (index $method.Params 0).Type "context.Context"}}
+           _params[0] = _ctx
+       {{end}}
+   {{end}}
+   defer _w._onPanic.Hook(_w.{{$.Interface.Name}}, "{{$method.Name}}", _params)
+
+    {{$methodCall := print "_w." $.Interface.Name "." $method.Call}}
+    {{if $method.Params}}
+        {{if eq (index $method.Params 0).Type "context.Context"}}
+            {{$methodCall = print "_w." $.Interface.Name "." $method.Name "(_ctx"}}
+            {{range $param := slice $method.Params 1}}
+                {{$methodCall = print $methodCall ", " $param.Name}}
+                {{if eq (printf "%.3s" $param.Type) "..."}}
+                    {{$methodCall = print $methodCall "..."}}
+                {{end}}
+            {{end}}
+            {{$methodCall = print $methodCall ")"}}
+        {{end}}
+    {{end}}
+
+    {{with $method.ResultsNames}} {{$method.ResultsNames}} = {{end}} {{ $methodCall }}
+    _w._postCall.Hook(_ctx, _w.{{$.Interface.Name}}, "{{$method.Name}}", []any{ {{$method.ResultsNames}} })
+    return {{$method.ResultsNames}}
+  }
+{{end}}
+
+// New{{$decorator}} returns {{$decorator}}
+func New{{$decorator}} (object {{.Interface.Type}}, beforeCall _proxyLib.Hook, postCall _proxyLib.Hook, onPanic _proxyLib.PanicHook) *{{$decorator}} {
+  return &{{$decorator}} {
+    {{$.Interface.Name}}: object,
+    _beforeCall: beforeCall,
+    _postCall: postCall,
+    _onPanic: onPanic,
+  }
+}
